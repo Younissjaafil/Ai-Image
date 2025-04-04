@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import random
 import uuid
@@ -7,12 +5,11 @@ import uuid
 import gradio as gr
 import numpy as np
 from PIL import Image
-import spaces
 import torch
 from diffusers import StableDiffusionXLPipeline, EulerAncestralDiscreteScheduler
 
 DESCRIPTION = """
-# DALL•E 3 XL v2
+# 3VO DALL•E 3 XL v2
 """
 
 def save_image(img):
@@ -30,12 +27,6 @@ MAX_SEED = np.iinfo(np.int32).max
 if not torch.cuda.is_available():
     DESCRIPTION += "\n<p>Running on CPU 🥶 This demo may not work on CPU.</p>"
 
-MAX_SEED = np.iinfo(np.int32).max
-
-USE_TORCH_COMPILE = 0
-ENABLE_CPU_OFFLOAD = 0
-
-
 if torch.cuda.is_available():
     pipe = StableDiffusionXLPipeline.from_pretrained(
         "fluently/Fluently-XL-Final",
@@ -43,16 +34,41 @@ if torch.cuda.is_available():
         use_safetensors=True,
     )
     pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
-    
-    
+
     pipe.load_lora_weights("ehristoforu/dalle-3-xl-v2", weight_name="dalle-3-xl-lora-v2.safetensors", adapter_name="dalle")
     pipe.set_adapters("dalle")
 
     pipe.to("cuda")
-    
-    
 
-@spaces.GPU(enable_queue=True)
+# 🔧 Removed @spaces.GPU decorator for Colab
+# def generate(
+#     prompt: str,
+#     negative_prompt: str = "",
+#     use_negative_prompt: bool = False,
+#     seed: int = 0,
+#     width: int = 1024,
+#     height: int = 1024,
+#     guidance_scale: float = 3,
+#     randomize_seed: bool = False,
+#     progress=gr.Progress(track_tqdm=True),
+# ):
+#     seed = int(randomize_seed_fn(seed, randomize_seed))
+
+#     if not use_negative_prompt:
+#         negative_prompt = ""  # type: ignore
+
+#     images = pipe(
+#         prompt=prompt,
+#         negative_prompt=negative_prompt,
+#         width=width,
+#         height=height,
+#         guidance_scale=guidance_scale,
+#         num_inference_steps=25,
+#         num_images_per_prompt=1,
+#         cross_attention_kwargs={"scale": 0.65},
+#         output_type="pil",
+#     ).images
+#     return images, seed
 def generate(
     prompt: str,
     negative_prompt: str = "",
@@ -64,12 +80,9 @@ def generate(
     randomize_seed: bool = False,
     progress=gr.Progress(track_tqdm=True),
 ):
-
-    
     seed = int(randomize_seed_fn(seed, randomize_seed))
-
     if not use_negative_prompt:
-        negative_prompt = ""  # type: ignore
+        negative_prompt = ""
 
     images = pipe(
         prompt=prompt,
@@ -82,9 +95,13 @@ def generate(
         cross_attention_kwargs={"scale": 0.65},
         output_type="pil",
     ).images
-    image_paths = [save_image(img) for img in images]
-    print(image_paths)
-    return image_paths, seed
+
+    # Save image with .jpg extension
+    image_path = f"{uuid.uuid4().hex}.jpg"
+    images[0].save(image_path, format="JPEG")
+
+    return [image_path], seed
+
 
 examples = [
     "neon holography crystal cat",
@@ -104,11 +121,6 @@ footer {
 '''
 with gr.Blocks(css=css, theme="pseudolab/huggingface-korea-theme") as demo:
     gr.Markdown(DESCRIPTION)
-    gr.DuplicateButton(
-        value="Duplicate Space for private use",
-        elem_id="duplicate-button",
-        visible=False,
-    )
 
     with gr.Group():
         with gr.Row():
@@ -178,7 +190,6 @@ with gr.Blocks(css=css, theme="pseudolab/huggingface-korea-theme") as demo:
         outputs=negative_prompt,
         api_name=False,
     )
-    
 
     gr.on(
         triggers=[
@@ -200,6 +211,6 @@ with gr.Blocks(css=css, theme="pseudolab/huggingface-korea-theme") as demo:
         outputs=[result, seed],
         api_name="run",
     )
-    
+
 if __name__ == "__main__":
-    demo.queue(max_size=20).launch(show_api=False, debug=False)
+    demo.queue(max_size=20).launch(share=True, debug=True)
